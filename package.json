@@ -1,0 +1,32 @@
+{
+  "name": "download-certs",
+  "version": "0.0.1",
+  "description": "Download X.509 certificates from TLS servers",
+  "main": "index.js",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --outdir=dist --platform=node",
+    "clean": "rimraf dist",
+    "esbuild": "esbuild"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hbobenicio/download-certs.git"
+  },
+  "keywords": [
+    "x509",
+    "certificates",
+    "tls",
+    "download"
+  ],
+  "author": "hbobenicio <hbobenicio@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/hbobenicio/download-certs/issues"
+  },
+  "homepage": "https://github.com/hbobenicio/download-certs#readme",
+  "devDependencies": {
+    "@types/node": "^16.9.4",
+    "esbuild": "^0.12.28",
+    "rimraf": "^3.0.2"
+  }
+}

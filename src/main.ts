@@ -1,7 +1,7 @@
-const fs = require('fs');
-const tls = require('tls');
-const util = require('util');
-const child_process = require('child_process');
+import * as fs from 'fs';
+import * as tls from 'tls';
+import * as util from 'util';
+import * as child_process from 'child_process';
 
 const writeFile = util.promisify(fs.writeFile);
 const exec = util.promisify(child_process.exec);
@@ -25,59 +25,81 @@ function printUsage() {
 }
 
 class CliParserError extends Error {
-    constructor({ message }) {
-        super(message);
+    code: string;
+    data: { systemCode: number };
 
+    constructor({ message }: { message: string }) {
+        super(message);
         this.name = this.constructor.name;
+        this.code = 'CLI_PARSER_ERROR';
+        this.data = { systemCode: 1 };
         Error.captureStackTrace(this, this.constructor);
     }
 }
 
 class NoArgumentsProvidedError extends CliParserError {
     constructor() {
-        super('no arguments provided');
+        super({ message: 'no arguments provided' });
 
         this.code = 'CLI_PARSER_NO_ARGS_PROVIDED_ERR';
-        this.data = {
-            systemCode: 2,
-        };
+        this.data = { systemCode: 2 };
     }
 }
 
 class NoRequiredArgumentValueProvidedError extends CliParserError {
-    constructor({ arg }) {
+    code: string;
+    data: { arg: string, systemCode: number };
+
+    constructor({ arg }: { arg: string }) {
         super({ message: `no required value provided for argument "${arg}"` });
 
         this.code = 'CLI_PARSER_NO_REQUIRED_ARGUMENT_VALUE_PROVIDED_ERR';
-        this.data = {
-            arg,
-            systemCode: 3,
-        };
+        this.data = { arg, systemCode: 3 };
     }
 }
 
 class UnrecognizedOptionError extends CliParserError {
-    constructor({ lexeme }) {
+    code: string;
+    data: { lexeme: string, systemCode: number };
+    
+    constructor({ lexeme }: { lexeme: string }) {
         super({ message: `unrecognized option "${lexeme}"` });
 
         this.code = 'CLI_PARSER_UNRECOGNIZED_OPTION_ERR';
-        this.data = {
-            lexeme,
-            systemCode: 4,
-        };
+        this.data = { lexeme, systemCode: 4 };
     }
 }
 
+interface CliParserOptions {
+    help?: true;
+    'server-name'?: string;
+    insecure?: true;
+    jks?: true;
+}
+
+interface CliContext {
+    options: CliParserOptions;
+    args: string[];
+}
+
+interface DownloadParam {
+    host: string;
+    port: number;
+    connectionOptions: tls.ConnectionOptions;
+}
+
 class CliParser {
+    args: string[];
+    offset: number;
 
     constructor() {
         this.args = process.argv.slice(2);
         this.offset = 0;
     }
 
-    parse() {
-        const options = this.parseOptions();
-        const args = this.parseArgs();
+    parse(): CliContext {
+        const options: CliParserOptions = this.parseOptions();
+        const args: string[] = this.parseArgs();
 
         if (!options['help'] && args.length === 0) {
             throw new NoArgumentsProvidedError();
@@ -86,8 +108,8 @@ class CliParser {
         return { options, args };
     }
 
-    parseOptions() {
-        const options = {};
+    parseOptions(): CliParserOptions {
+        const options: any = {};
         for (let { option, value } of this.parseOption()) {
             options[option] = value;
         }
@@ -159,7 +181,7 @@ class CliParser {
     }
 }
 
-function tlsConnect(connectionOptions) {
+function tlsConnect(connectionOptions: tls.ConnectionOptions): Promise<tls.TLSSocket> {
     return new Promise(function (resolve, reject) {
         const tlsSocket = tls.connect(connectionOptions, function () {
             resolve(tlsSocket);
@@ -168,7 +190,7 @@ function tlsConnect(connectionOptions) {
     });
 }
 
-function collectCerts(rootCert) {
+function collectCerts(rootCert: tls.DetailedPeerCertificate) {
     const certs = [];
     let cert = rootCert;
     for (; cert !== null && cert !== cert.issuerCertificate; cert = cert.issuerCertificate) {
@@ -178,15 +200,15 @@ function collectCerts(rootCert) {
     return certs;
 }
 
-function derToPem(derCert) {
+function derToPem(derCert: Buffer) {
     const header = '-----BEGIN CERTIFICATE-----\n';
     const footer = '-----END CERTIFICATE-----';
     return header + derCert.toString('base64') + footer;
 }
 
-async function handleConnection(tlsSocket, cliContext, downloadParam) {
+async function handleConnection(tlsSocket: tls.TLSSocket, cliContext: CliContext, downloadParam: DownloadParam) {
     const detailed = true;
-    let rootCert = tlsSocket.getPeerCertificate(detailed);
+    let rootCert: tls.DetailedPeerCertificate = tlsSocket.getPeerCertificate(detailed);
     if (rootCert === null) {
         throw new Error('could not get server certificate');
     }
@@ -234,7 +256,7 @@ function parseArgs() {
         let errorCode;
         if (err instanceof CliParserError) {
             console.error(`\u001b[91merror: ${err.message}.\u001b[0m\n`);
-            errorCode = err.systemCode;
+            errorCode = err.data.systemCode;
         } else {
             console.error('\u001b[91merror:\u001b[0m', err);
             errorCode = 1;
@@ -244,8 +266,8 @@ function parseArgs() {
     }
 }
 
-async function downloadCertificates(cliContext, downloadParam) {
-    let tlsSocket;
+async function downloadCertificates(cliContext: CliContext, downloadParam: DownloadParam) {
+    let tlsSocket: tls.TLSSocket;
     try {
         tlsSocket = await tlsConnect(downloadParam.connectionOptions);
     } catch (err) {
@@ -274,15 +296,15 @@ async function main() {
 
     // Converte os argumentos (hostnames) em objetos {host, port, connectionOptions}
     // connectionOptions tls.connect
-    const downloadParams = cliContext.args.map(hostname => {
+    const downloadParams: DownloadParam[] = cliContext.args.map(hostname => {
         const parts = hostname.split(':');
         const host = parts[0];
 
         // define a porta padrão 443 caso o hostname não tenha sido definido no formato 'host:port'
-        const port = (parts.length > 1) ? parts[1] : '443';
+        const port: number = (parts.length > 1) ? Number(parts[1]) : 443;
 
         // Define o objeto que descreve as opções de tls.connect
-        const connectionOptions = { host, port };
+        const connectionOptions: tls.ConnectionOptions = { host, port };
 
         if (cliContext.options['server-name']) {
             connectionOptions.servername = cliContext.options['server-name'];
